@@ -700,6 +700,34 @@ AC_CHECK_DECL([_mm_movemask_epi8],
 
 
 ###############################################################################
+# MADV_HUGEPAGE
+###############################################################################
+
+AC_MSG_CHECKING([whether madvise supports huge pages])
+AC_ARG_ENABLE([madv-hugepage], AS_HELP_STRING([--disable-madv-hugepage],
+		[Do not use madvise huge page hint even if such is supported.]),
+	[], [enable_madv_hugepage=yes])
+if test "x$enable_madv_hugepage" = xyes; then
+	AC_COMPILE_IFELSE([AC_LANG_SOURCE([[
+	#include <stdlib.h>
+	#include <unistd.h>
+	#include <sys/mman.h>
+	void f(void *p, size_t size) {
+		if (posix_memalign(&p, (size_t)sysconf(_SC_PAGESIZE), size))
+			madvise(p, size, MADV_HUGEPAGE);
+	}
+	]])],
+	[enable_madv_hugepage=yes], [enable_madv_hugepage=no])
+fi
+AC_MSG_RESULT([$enable_madv_hugepage])
+
+if test "x$enable_madv_hugepage" = xyes; then
+	AC_DEFINE([ENABLE_MADV_HUGEPAGE], [1],
+		[Define to 1 when madvise supports MADV_HUGEPAGE.])
+fi
+
+
+###############################################################################
 # If using GCC, set some additional AM_CFLAGS:
 ###############################################################################
 

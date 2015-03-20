@@ -12,6 +12,11 @@
 
 #include "private.h"
 
+#ifdef ENABLE_MADV_HUGEPAGE
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/mman.h>
+#endif
 
 /// Return value type for coder_init().
 enum coder_init_ret {
@@ -31,6 +36,29 @@ uint64_t *opt_block_list = NULL;
 
 /// Stream used to communicate with liblzma
 static lzma_stream strm = LZMA_STREAM_INIT;
+
+
+#ifdef ENABLE_MADV_HUGEPAGE
+static LZMA_API(void *) custom_alloc(void *opaque lzma_attribute((__unused__)),
+				     size_t nmemb, size_t size)
+{
+	/* FIXME: check for overflow? */
+	size_t buf_size = nmemb * size;
+	/* FIXME: don't do it on every allocation */
+	size_t page_size = sysconf(_SC_PAGESIZE);
+	void *ptr;
+
+	if (buf_size < page_size || posix_memalign(&ptr, page_size, buf_size))
+		return malloc(buf_size);
+
+	madvise(ptr, buf_size, MADV_HUGEPAGE);
+	return ptr;
+}
+
+static lzma_allocator allocator = {
+	.alloc = custom_alloc
+};
+#endif
 
 /// Filters needed for all encoding all formats, and also decoding in raw data
 static lzma_filter filters[LZMA_FILTERS_MAX + 1];
@@ -422,6 +450,9 @@ static enum coder_init_ret
 coder_init(file_pair *pair)
 {
 	lzma_ret ret = LZMA_PROG_ERROR;
+#ifdef ENABLE_MADV_HUGEPAGE
+	strm.allocator = &allocator;
+#endif
 
 	if (opt_mode == MODE_COMPRESS) {
 		switch (opt_format) {
